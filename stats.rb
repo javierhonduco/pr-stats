@@ -3,7 +3,7 @@ require 'octokit'
 Thread.abort_on_exception = true
 
 class PullRequestFetcher
-  attr_accessor :stats, :total_prs
+  attr_accessor :stats, :total_prs, :elapsed_time
 
   def initialize(client, repo, state, max_pages = 1)
     @client = client
@@ -12,6 +12,7 @@ class PullRequestFetcher
     @queue = Queue.new
     @max_pages = max_pages
     @total_prs = nil
+    @num_threads = (ENV['NUM_THREADS'] || 2).to_i
     @stats = {}
   end
 
@@ -36,23 +37,32 @@ class PullRequestFetcher
   end
 
   def worker
-    loop do
+    until @queue.empty?
       page = @queue.pop
-      return if page.nil?
       process_prs(pull_requests(page))
     end
   end
 
   def fetch
-    fetch_first
-    fetch_last_and_prepare
-    start_workers
+    benchmark do
+      fetch_first
+      fetch_last_and_prepare
+      start_workers
+    end
+  end
+
+  def benchmark
+    before = Time.now
+    yield
+    @elapsed_time = Time.now - before
   end
 
   def start_workers
-    Thread.new do
-      worker
-    end.join
+    @num_threads.times.map do
+      Thread.new do
+        worker
+      end
+    end.map(&:join)
   end
 
   def fetch_first
@@ -86,7 +96,12 @@ def main
     per_page: 10000
   )
 
-  pr_fetcher = PullRequestFetcher.new(client, 'rails/rails', :closed)
+  pr_fetcher = PullRequestFetcher.new(
+    client,
+    'rails/rails',
+    :closed,
+    4,
+  )
   pr_fetcher.fetch
   stats = pr_fetcher.stats
 
@@ -101,7 +116,7 @@ def main
     sort.
     reverse
 
-  puts "Fetched #{stats.size} PRs"
+  puts "Fetched #{stats.size} PRs in #{pr_fetcher.elapsed_time}s"
   puts "Top 3 PR authors #{top_authors.take(3)}"
   puts "Smallest time-to-close #{open_close_difference.min}s"
   puts "Biggest time-to-close #{open_close_difference.max}s"
