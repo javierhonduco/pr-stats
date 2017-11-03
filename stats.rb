@@ -82,7 +82,7 @@ end
 
 def main
   client = Octokit::Client.new(
-    access_token: '7024115fe0421a5e95289da0cb79a5d17cda9c49',
+    access_token: ENV['GITHUB_ACCESS_TOKEN'],
     per_page: 10000
   )
 
