@@ -7,3 +7,5 @@ Top 3 PR authors [["yhirano55", 83], ["y-yagi", 65], ["bogdanvlviv", 28]]
 Smallest time-to-close 8.0s
 Biggest time-to-close 5183821.0s
 ```
+
+To use your token: `GITHUB_ACCESS_TOKEN='<token>' ruby stats.rb`
