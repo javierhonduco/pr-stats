@@ -12,7 +12,7 @@ class PullRequestFetcher
     @queue = Queue.new
     @max_pages = max_pages
     @total_prs = nil
-    @num_threads = (ENV['NUM_THREADS'] || 2).to_i
+    @num_threads = (ENV['NUM_THREADS'] || 4).to_i
     @stats = {}
   end
 
@@ -22,15 +22,12 @@ class PullRequestFetcher
 
   def process_prs(prs)
     prs.each do |pr|
-      @stats[pr.id] = {
+      @stats[pr.number] = {
         state: pr.state,
         closed_at: pr.closed_at,
         created_at: pr.created_at,
         url: pr.url,
         merged_at: pr.merged_at,
-        comments: pr.comments,
-        additions: pr.additions,
-        changed_files: pr.changed_files,
         author: pr.user.login,
       }
     end
@@ -58,7 +55,7 @@ class PullRequestFetcher
   end
 
   def start_workers
-    @num_threads.times.map do
+    [@num_threads, @pages].min.times.map do
       Thread.new do
         worker
       end
@@ -78,12 +75,12 @@ class PullRequestFetcher
   end
 
   def enqueue_tasks(last_page_index)
-    pages = if @max_pages == -1
+    @pages = if @max_pages == -1
               last_page_index
             else
               @max_pages
             end
-    2.upto(pages).each do |page|
+    2.upto(@pages).each do |page|
       @queue << page
     end
     @queue << nil
@@ -100,7 +97,7 @@ def main
     client,
     'rails/rails',
     :closed,
-    4,
+    1,
   )
   pr_fetcher.fetch
   stats = pr_fetcher.stats
@@ -120,6 +117,8 @@ def main
   puts "Top 3 PR authors #{top_authors.take(3)}"
   puts "Smallest time-to-close #{open_close_difference.min}s"
   puts "Biggest time-to-close #{open_close_difference.max}s"
+
+  File.open('dump.json', 'w').write(JSON.dump(stats)) if ENV['DUMP_JSON']
 end
 
 if $0 == __FILE__
